@@ -17,9 +17,9 @@ Run the script directly:
 
 | Command | Description |
 |---------|-------------|
-| `new [title] [options]` | Create ticket, prints ID |
+| `create [title] [options]` | Create ticket, prints ID |
 
-Options for `new`:
+Options for `create`:
 - `-d, --description` - Description text
 - `--design` - Design notes
 - `--acceptance` - Acceptance criteria
@@ -110,4 +110,4 @@ Key functions:
 - `cmd_*()` - Command handlers
 - `cmd_ready()`, `cmd_blocked()`, `cmd_ls()` - awk-based bulk listing with sorting
 
-Dependencies: bash, sed, awk, find, sha256sum. Optional: ripgrep (preferred over grep), jq (for query command).
+Dependencies: bash, sed, awk, find. Optional: ripgrep (faster grep), jq (for query command).
