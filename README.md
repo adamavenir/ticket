@@ -71,19 +71,26 @@ Tickets stored as markdown files in .tickets/
 Supports partial ID matching (e.g., 'tk show 5c4' matches 'nw-5c46')
 ```
 
-## Ticket Format
+## Migrating from Beads
 
-```yaml
----
-id: <prefix>-xxxx
-status: open
-deps: [dep-id]
-priority: 2
-type: task
----
-# Title
+```bash
+tk migrate-beads
 
-Description...
+# review new files if you like
+git status
+
+# check state matches expectations
+tk ready
+tk blocked
+
+# compare against
+bd ready
+bd blocked
+
+# all good, let's go
+git rm -rf .beads
+git add .tickets
+git commit -am "ditch beads"
 ```
 
 ## License
