@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- `dep cycle` command to detect dependency cycles in open tickets
 - `add-note` command for appending timestamped notes to tickets
 - `-a, --assignee` filter flag for `ls`, `ready`, `blocked`, and `closed` commands
 - `--tags` flag for `create` command to add comma-separated tags

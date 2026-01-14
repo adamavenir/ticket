@@ -73,6 +73,7 @@ Commands:
   status <id> <status>     Update status (open|in_progress|closed)
   dep <id> <dep-id>        Add dependency (id depends on dep-id)
   dep tree [--full] <id>   Show dependency tree (--full disables dedup)
+  dep cycle                Find dependency cycles in open tickets
   undep <id> <dep-id>      Remove dependency
   link <id> <id> [id...]   Link tickets together (symmetric)
   unlink <id> <target-id>  Remove link between tickets
