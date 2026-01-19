@@ -176,6 +176,37 @@ def step_ticket_has_notes(context, ticket_id):
         ticket_path.write_text(content)
 
 
+@given(r'I am in subdirectory "(?P<subdir>[^"]+)"')
+def step_in_subdirectory(context, subdir):
+    """Change to a subdirectory (creating it if needed)."""
+    subdir_path = Path(context.test_dir) / subdir
+    subdir_path.mkdir(parents=True, exist_ok=True)
+    context.working_dir = str(subdir_path)
+
+
+@given(r'a separate tickets directory exists at "(?P<dir_path>[^"]+)" with ticket "(?P<ticket_id>[^"]+)" titled "(?P<title>[^"]+)"')
+def step_separate_tickets_dir(context, dir_path, ticket_id, title):
+    """Create a separate tickets directory with a ticket."""
+    tickets_dir = Path(context.test_dir) / dir_path
+    tickets_dir.mkdir(parents=True, exist_ok=True)
+
+    ticket_path = tickets_dir / f'{ticket_id}.md'
+    content = f'''---
+id: {ticket_id}
+status: open
+deps: []
+links: []
+created: 2024-01-01T00:00:00Z
+type: task
+priority: 2
+---
+# {title}
+
+Description
+'''
+    ticket_path.write_text(content)
+
+
 # ============================================================================
 # When Steps
 # ============================================================================
@@ -225,6 +256,37 @@ def step_run_command_no_stdin(context, command):
     context.returncode = result.returncode
 
 
+@when(r'I run "(?P<command>(?:[^"\\]|\\.)+)" with TICKETS_DIR set to "(?P<tickets_dir>[^"]+)"')
+def step_run_command_with_env(context, command, tickets_dir):
+    """Run a ticket CLI command with custom TICKETS_DIR."""
+    command = command.replace('\\"', '"')
+    ticket_script = get_ticket_script(context)
+    cmd = command.replace('ticket ', f'{ticket_script} ', 1)
+
+    # Use working_dir if set (from subdirectory step), otherwise test_dir
+    cwd = getattr(context, 'working_dir', context.test_dir)
+
+    # Resolve tickets_dir relative to test_dir
+    env = os.environ.copy()
+    env['TICKETS_DIR'] = str(Path(context.test_dir) / tickets_dir)
+
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        env=env
+    )
+
+    context.result = result
+    context.stdout = result.stdout.strip()
+    context.stderr = result.stderr.strip()
+    context.returncode = result.returncode
+    context.last_command = command
+
+
 @when(r'I run "(?P<command>(?:[^"\\]|\\.)+)"')
 def step_run_command(context, command):
     """Run a ticket CLI command."""
@@ -234,10 +296,13 @@ def step_run_command(context, command):
     ticket_script = get_ticket_script(context)
     cmd = command.replace('ticket ', f'{ticket_script} ', 1)
 
+    # Use working_dir if set (from subdirectory step), otherwise test_dir
+    cwd = getattr(context, 'working_dir', context.test_dir)
+
     result = subprocess.run(
         cmd,
         shell=True,
-        cwd=context.test_dir,
+        cwd=cwd,
         capture_output=True,
         text=True,
         stdin=subprocess.DEVNULL  # Non-interactive tests
@@ -340,6 +405,14 @@ def step_tickets_dir_exists(context):
     """Assert .tickets directory exists."""
     tickets_dir = Path(context.test_dir) / '.tickets'
     assert tickets_dir.exists(), f".tickets directory does not exist"
+
+
+@then(r'tickets directory should exist in current subdirectory')
+def step_tickets_dir_exists_in_subdir(context):
+    """Assert .tickets directory exists in the current working subdirectory."""
+    cwd = getattr(context, 'working_dir', context.test_dir)
+    tickets_dir = Path(cwd) / '.tickets'
+    assert tickets_dir.exists(), f".tickets directory does not exist in {cwd}"
 
 
 @then(r'the created ticket should contain "(?P<text>[^"]+)"')

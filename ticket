@@ -4,7 +4,56 @@ set -euo pipefail
 # ticket - minimal ticket system with dependency tracking
 # Stores markdown files with YAML frontmatter in .tickets/
 
-TICKETS_DIR="${TICKETS_DIR:-.tickets}"
+# Find .tickets directory by walking parent directories
+find_tickets_dir() {
+    # Explicit env var takes priority
+    [[ -n "${TICKETS_DIR:-}" ]] && { echo "$TICKETS_DIR"; return 0; }
+
+    # Walk parents looking for .tickets
+    local dir="$PWD"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -d "$dir/.tickets" ]]; then
+            echo "$dir/.tickets"
+            return 0
+        fi
+        dir=$(dirname "$dir")
+    done
+
+    # Check root too
+    [[ -d "/.tickets" ]] && { echo "/.tickets"; return 0; }
+
+    # Not found
+    return 1
+}
+
+# Commands that can create .tickets if not found
+WRITE_COMMANDS="create migrate-beads"
+
+# Initialize TICKETS_DIR based on command type
+init_tickets_dir() {
+    local cmd="$1"
+    local is_write_cmd=0
+    [[ " $WRITE_COMMANDS " == *" $cmd "* ]] && is_write_cmd=1
+
+    if TICKETS_DIR=$(find_tickets_dir); then
+        # For read commands, verify the directory exists
+        if [[ $is_write_cmd -eq 0 ]] && [[ ! -d "$TICKETS_DIR" ]]; then
+            echo "Error: tickets directory '$TICKETS_DIR' does not exist" >&2
+            return 1
+        fi
+        return 0
+    fi
+
+    # Not found - write commands can initialize in current directory
+    if [[ $is_write_cmd -eq 1 ]]; then
+        TICKETS_DIR=".tickets"
+        return 0
+    fi
+
+    echo "Error: no .tickets directory found (searched parent directories)" >&2
+    echo "Run 'tk create' to initialize, or set TICKETS_DIR env var" >&2
+    return 1
+}
 
 # Prefer ripgrep if available, fall back to grep
 if command -v rg &>/dev/null; then
@@ -435,8 +484,6 @@ cmd_dep_tree() {
 }
 
 cmd_dep_cycle() {
-    [[ ! -d "$TICKETS_DIR" ]] && return 0
-
     awk '
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
@@ -598,8 +645,6 @@ cmd_dep() {
 }
 
 cmd_ls() {
-    [[ ! -d "$TICKETS_DIR" ]] && return 0
-
     local status_filter="" assignee_filter="" tag_filter=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -647,8 +692,6 @@ cmd_ls() {
 }
 
 cmd_ready() {
-    [[ ! -d "$TICKETS_DIR" ]] && return 0
-
     local assignee_filter="" tag_filter=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -739,8 +782,6 @@ cmd_ready() {
 }
 
 cmd_closed() {
-    [[ ! -d "$TICKETS_DIR" ]] && return 0
-
     local limit=20 assignee_filter="" tag_filter=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -788,8 +829,6 @@ cmd_closed() {
 }
 
 cmd_blocked() {
-    [[ ! -d "$TICKETS_DIR" ]] && return 0
-
     local assignee_filter="" tag_filter=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1258,8 +1297,6 @@ cmd_edit() {
 }
 
 cmd_query() {
-    [[ ! -d "$TICKETS_DIR" ]] && return 0
-
     local filter="${1:-}"
 
     # Generate all JSON in one awk pass
@@ -1417,6 +1454,12 @@ EOF
 }
 
 # Main dispatch
+# Initialize tickets dir (skip for help)
+case "${1:-help}" in
+    help|--help|-h) ;;
+    *) init_tickets_dir "${1:-}" || exit 1 ;;
+esac
+
 case "${1:-help}" in
     create) shift; cmd_create "$@" ;;
     start)  shift; cmd_start "$@" ;;
