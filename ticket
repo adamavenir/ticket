@@ -1056,6 +1056,29 @@ cmd_edit() {
     "${EDITOR:-vi}" "$file"
 }
 
+cmd_add_note() {
+    if [[ $# -lt 1 ]]; then
+        echo "Usage: ticket add-note <id> [text]" >&2
+        return 1
+    fi
+
+    local file
+    file=$(ticket_path "$1") || return 1
+    shift
+
+    local note
+    if [[ $# -gt 0 ]]; then
+        note="$*"
+    else
+        note=$(cat)
+    fi
+
+    local timestamp
+    timestamp=$(date -u +"%Y-%m-%d %H:%M UTC")
+
+    printf '\n**%s:** %s\n' "$timestamp" "$note" >> "$file"
+}
+
 cmd_query() {
     [[ ! -d "$TICKETS_DIR" ]] && return 0
 
@@ -1197,17 +1220,18 @@ Commands:
   tags                     List tags in use by open tickets
   ls [options]             List tickets
     --status=X             Filter by status
-    --tag=PATTERN          Filter by tag (supports wildcards: size-*)
+    --tag=PATTERN          Filter by tag (supports wildcards: 'size-*')
     --dir=DIR              Filter by subdirectory
     --summary              Show directory progress summary
   ready [options]          List open/in-progress tickets with deps resolved
     --tags                 Show tags for each ticket
-    --group[=PATTERN]      Group by tag (optionally filter tags: --group=size-*)
+    --group[=PATTERN]      Group by tag (optionally filter tags: --group='size-*')
     --dir=DIR              Filter by subdirectory
   blocked                  List open/in-progress tickets with unresolved deps
   closed [--limit=N]       List recently closed tickets (default 20, by mtime)
   show <id>                Display ticket
   edit <id>                Open ticket in \$EDITOR
+  add-note <id> [text]     Append timestamped note (or pipe via stdin)
   query [jq-filter]        Output tickets as JSON, optionally filtered
   migrate-beads            Import tickets from .beads/issues.jsonl
 
@@ -1235,6 +1259,7 @@ case "${1:-help}" in
     closed) shift; cmd_closed "$@" ;;
     show)   shift; cmd_show "$@" ;;
     edit)   shift; cmd_edit "$@" ;;
+    add-note) shift; cmd_add_note "$@" ;;
     query) shift; cmd_query "$@" ;;
     migrate-beads) shift; cmd_migrate_beads "$@" ;;
     help|--help|-h) cmd_help ;;
