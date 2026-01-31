@@ -1243,7 +1243,7 @@ EOF
 
 # Main dispatch
 case "${1:-help}" in
-    create) shift; cmd_create "$@" ;;
+    create|add|new) shift; cmd_create "$@" ;;
     start)  shift; cmd_start "$@" ;;
     close)  shift; cmd_close "$@" ;;
     reopen) shift; cmd_reopen "$@" ;;
