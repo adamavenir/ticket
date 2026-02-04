@@ -633,10 +633,11 @@ cmd_ls() {
 cmd_ready() {
     [[ ! -d "$TICKETS_DIR" ]] && return 0
 
-    local show_tags=0 group_mode=0 group_pattern="" dir_filter=""
+    local show_tags=0 group_mode=0 group_pattern="" dir_filter="" json_mode=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --tags) show_tags=1; shift ;;
+            --json) json_mode=1; shift ;;
             --group=*) group_mode=1; group_pattern="${1#--group=}"; shift ;;
             --group) group_mode=1; shift; [[ $# -gt 0 && "$1" != --* ]] && { group_pattern="$1"; shift; } ;;
             --dir=*) dir_filter="${1#--dir=}"; shift ;;
@@ -654,7 +655,7 @@ cmd_ready() {
     fi
     [[ -z "$files" ]] && return 0
 
-    echo "$files" | xargs awk -v show_tags="$show_tags" -v group_mode="$group_mode" -v group_pattern="$group_pattern" '
+    echo "$files" | xargs awk -v show_tags="$show_tags" -v group_mode="$group_mode" -v group_pattern="$group_pattern" -v json_mode="$json_mode" -v tickets_dir="$TICKETS_DIR" '
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) store()
@@ -674,6 +675,14 @@ cmd_ready() {
         gsub(/[\[\] ]/, "", tags)
     }
     !in_front && /^# / && title == "" { title = substr($0, 3) }
+    function get_dir(filepath,    dir, base) {
+        # Remove tickets_dir prefix and filename to get subdir
+        sub(tickets_dir "/", "", filepath)
+        if (match(filepath, "/[^/]+$")) {
+            return substr(filepath, 1, RSTART - 1)
+        }
+        return ""
+    }
     function store() {
         if (id != "") {
             statuses[id] = status
@@ -681,6 +690,7 @@ cmd_ready() {
             deps_raw[id] = deps
             priorities[id] = (priority != "") ? priority : 2
             tags_raw[id] = tags
+            dirs[id] = get_dir(prev_file)
         }
     }
     function glob_match(str, pattern,    regex) {
@@ -725,7 +735,29 @@ cmd_ready() {
             }
         }
 
-        if (group_mode) {
+        if (json_mode) {
+            # JSON output
+            printf "["
+            for (i = 1; i <= ready_count; i++) {
+                id = ready_ids[i]
+                if (i > 1) printf ","
+                printf "{\"id\":\"%s\",\"status\":\"%s\",\"priority\":%s,\"title\":\"%s\"", id, statuses[id], priorities[id], titles[id]
+                if (dirs[id] != "") {
+                    printf ",\"dir\":\"%s\"", dirs[id]
+                }
+                if (tags_raw[id] != "") {
+                    printf ",\"tags\":["
+                    n = split(tags_raw[id], arr, ",")
+                    for (j = 1; j <= n; j++) {
+                        if (j > 1) printf ","
+                        printf "\"%s\"", arr[j]
+                    }
+                    printf "]"
+                }
+                printf "}"
+            }
+            printf "]\n"
+        } else if (group_mode) {
             # Collect all tags from ready tickets, filtering by pattern
             for (i = 1; i <= ready_count; i++) {
                 id = ready_ids[i]
@@ -1004,6 +1036,54 @@ cmd_tags() {
     ' "$TICKETS_DIR"/*.md 2>/dev/null
 }
 
+cmd_dirs() {
+    [[ ! -d "$TICKETS_DIR" ]] && return 0
+
+    find "$TICKETS_DIR" -name "*.md" 2>/dev/null | xargs awk -v tickets_dir="$TICKETS_DIR" '
+    BEGIN { FS=": "; in_front=0 }
+    FNR==1 {
+        if (prev_file) store()
+        status=""; in_front=0
+        prev_file=FILENAME
+    }
+    /^---$/ { in_front = !in_front; next }
+    in_front && /^status:/ { status = $2 }
+    function get_dir(filepath) {
+        sub(tickets_dir "/", "", filepath)
+        if (match(filepath, "/[^/]+$")) {
+            return substr(filepath, 1, RSTART - 1)
+        }
+        return "(root)"
+    }
+    function store() {
+        dir = get_dir(prev_file)
+        if (status == "open" || status == "in_progress") {
+            open_count[dir]++
+        }
+        total_count[dir]++
+    }
+    END {
+        if (prev_file) store()
+        for (dir in total_count) {
+            output[++count] = dir
+        }
+        # Sort alphabetically
+        for (i = 1; i <= count; i++) {
+            for (j = i + 1; j <= count; j++) {
+                if (output[i] > output[j]) {
+                    tmp = output[i]; output[i] = output[j]; output[j] = tmp
+                }
+            }
+        }
+        for (i = 1; i <= count; i++) {
+            dir = output[i]
+            open = open_count[dir] + 0
+            printf "%s (%d open)\n", dir, open
+        }
+    }
+    '
+}
+
 cmd_undep() {
     if [[ $# -lt 2 ]]; then
         echo "Usage: ticket undep <id> <dependency-id>" >&2
@@ -1218,6 +1298,7 @@ Commands:
   tag <id> <tag> [...]     Add tag(s) to ticket
   untag <id> <tag> [...]   Remove tag(s) from ticket
   tags                     List tags in use by open tickets
+  dirs                     List directories with open ticket counts
   ls [options]             List tickets
     --status=X             Filter by status
     --tag=PATTERN          Filter by tag (supports wildcards: 'size-*')
@@ -1227,6 +1308,7 @@ Commands:
     --tags                 Show tags for each ticket
     --group[=PATTERN]      Group by tag (optionally filter tags: --group='size-*')
     --dir=DIR              Filter by subdirectory
+    --json                 Output as JSON array (includes dir field)
   blocked                  List open/in-progress tickets with unresolved deps
   closed [--limit=N]       List recently closed tickets (default 20, by mtime)
   show <id>                Display ticket
@@ -1253,6 +1335,7 @@ case "${1:-help}" in
     tag)    shift; cmd_tag "$@" ;;
     untag)  shift; cmd_untag "$@" ;;
     tags)   cmd_tags ;;
+    dirs)   cmd_dirs ;;
     ls)     shift; cmd_ls "$@" ;;
     ready)  shift; cmd_ready "$@" ;;
     blocked) cmd_blocked ;;
