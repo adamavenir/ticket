@@ -137,7 +137,8 @@ cmd_create() {
     # Parse args
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -d|--description) description="$2"; shift 2 ;;
+            -d|--description|--body) description="$2"; shift 2 ;;
+            --title) title="$2"; shift 2 ;;
             --design) design="$2"; shift 2 ;;
             --acceptance) acceptance="$2"; shift 2 ;;
             -p|--priority) priority="$2"; shift 2 ;;
@@ -1279,7 +1280,8 @@ Usage: $cmd <command> [args]
 
 Commands:
   create [title] [options] Create ticket, prints ID
-    -d, --description      Description text
+    --title                Title (alternative to positional arg)
+    -d, --description, --body  Description text
     --design               Design notes
     --acceptance           Acceptance criteria
     -t, --type             Type (bug|feature|task|epic|chore) [default: task]
